@@ -1,7 +1,5 @@
 const Sequelize = require("sequelize");
 const fs = require("fs");
-const env = require("dotenv");
-env.config();
 let sequelize = new Sequelize(
   "scqjkifj",
   "scqjkifj",
