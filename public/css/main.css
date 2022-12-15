@@ -1,0 +1,14 @@
+body {
+  font-family: "Lucida Sans", "Lucida Sans Regular", "Lucida Grande",
+    "Lucida Sans Unicode", Geneva, Verdana, sans-serif;
+  color: bisque;
+}
+
+h2 {
+  border-left: bisque solid 5px;
+  border-bottom: bisque solid 2px;
+  padding-left: 0.3em;
+  padding-bottom: 0.2em;
+  margin-top: 0.7em;
+  font-size: 3em;
+}
