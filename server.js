@@ -10,17 +10,17 @@
  *
  ********************************************************************************/
 const express = require("express");
-const blog = require("./blog-service.js");
+const blog = require("./blog-service");
+const authData = require("./auth-service");
 const multer = require("multer");
+const upload = multer(); // no { storage: storage } since we are not using disk storag
 const cloudinary = require("cloudinary").v2;
 const streamifier = require("streamifier");
 const path = require("path");
 const stripJs = require("strip-js");
-const authData = require("./auth-service");
 const clientSessions = require("client-sessions");
 const app = express();
 const HTTP_PORT = process.env.PORT || 8080;
-const { sendFile } = require("express/lib/response");
 const exphbs = require("express-handlebars");
 
 cloudinary.config({
@@ -30,15 +30,28 @@ cloudinary.config({
   secure: true,
 });
 
-app.get("/", (req, res) => {
-  res.redirect("./blog");
+app.use(
+  clientSessions({
+    cookieName: "session",
+    secret: "WEB322_ass6",
+    duration: 2 * 60 * 1000,
+    activeDuration: 60 * 1000,
+  })
+);
+
+app.use(function (req, res, next) {
+  res.locals.session = req.session;
+  next();
 });
 
-app.get("/about", (req, res) => {
-  res.render("./about");
-});
+function ensureLogin(req, res, next) {
+  if (!req.session.user) {
+    res.redirect("/login");
+  } else {
+    next();
+  }
+}
 
-const upload = multer(); // no { storage: storage } since we are not using disk storag
 app.engine(
   ".hbs",
   exphbs.engine({
@@ -76,7 +89,13 @@ app.engine(
     },
   })
 );
+
 app.set("view engine", ".hbs");
+app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
+function onHttpStart() {
+  console.log("Express http server listening on " + HTTP_PORT);
+}
 
 app.use(function (req, res, next) {
   let route = req.path.substring(1);
@@ -89,82 +108,12 @@ app.use(function (req, res, next) {
   next();
 });
 
-app.use(
-  clientSessions({
-    cookieName: "session",
-    secret: "WEB322_ass6",
-    duration: 2 * 60 * 1000,
-    activeDuration: 60 * 1000,
-  })
-);
-
-app.use(function (req, res, next) {
-  res.locals.session = req.session;
-  next();
+app.get("/", (req, res) => {
+  res.redirect("/blog");
 });
 
-function ensureLogin(req, res, next) {
-  if (!req.session.user) {
-    res.redirect("/login");
-  } else {
-    next();
-  }
-}
-
-// call this function after the http server starts listening for requests
-function onHttpStart() {
-  console.log("Express http server listening on " + HTTP_PORT);
-}
-
-app.use(express.static("public"));
-app.use(express.urlencoded({ extended: true }));
-
-app.get("/register", (req, res) => {
-  res.render("register");
-});
-
-app.post("/register", (req, res) => {
-  authData
-    .registerUser(req.body)
-    .then(() => {
-      res.render("register", { successMessage: "User created" }); //check this
-    })
-    .catch((err) => {
-      res.render("register", {
-        errorMessage: err,
-        userName: req.body.userName,
-      });
-    });
-});
-
-app.get("/login", (req, res) => {
-  res.render("login");
-});
-
-app.post("/login", (req, res) => {
-  req.body.userAgent = req.get("User-Agent");
-  authData
-    .checkUser(req.body)
-    .then((user) => {
-      req.session.user = {
-        userName: user.userName,
-        email: user.email,
-        loginHistory: user.loginHistory,
-      };
-      res.redirect("/posts");
-    })
-    .catch((err) => {
-      res.render("login", { errorMessage: err, userName: req.body.userName });
-    });
-});
-
-app.get("/logout", (req, res) => {
-  req.session.reset();
-  res.redirect("/login");
-});
-
-app.get("/userHistory", ensureLogin, (req, res) => {
-  res.render("userHistory");
+app.get("/about", (req, res) => {
+  res.render("about");
 });
 
 app.get("/blog", async (req, res) => {
@@ -193,54 +142,6 @@ app.get("/blog", async (req, res) => {
     // store the "posts" and "post" data in the viewData object (to be passed to the view)
     viewData.posts = posts;
     viewData.post = post;
-  } catch (err) {
-    viewData.message = "no results";
-  }
-
-  try {
-    // Obtain the full list of "categories"
-    let categories = await blog.getCategories();
-
-    // store the "categories" data in the viewData object (to be passed to the view)
-    viewData.categories = categories;
-  } catch (err) {
-    viewData.categoriesMessage = "no results";
-  }
-
-  // render the "blog" view with all of the data (viewData)
-  res.render("blog", { data: viewData });
-});
-
-app.get("/blog/:id", ensureLogin, async (req, res) => {
-  // Declare an object to store properties for the view
-  let viewData = {};
-
-  try {
-    // declare empty array to hold "post" objects
-    let posts = [];
-
-    // if there's a "category" query, filter the returned posts by category
-    if (req.query.category) {
-      // Obtain the published "posts" by category
-      posts = await blog.getPublishedPostsByCategory(req.query.category);
-      console.log(posts);
-    } else {
-      // Obtain the published "posts"
-      posts = await blog.getPublishedPosts();
-    }
-
-    // sort the published posts by postDate
-    posts.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
-
-    // store the "posts" and "post" data in the viewData object (to be passed to the view)
-    viewData.posts = posts;
-  } catch (err) {
-    viewData.message = "no results";
-  }
-
-  try {
-    // Obtain the post by "id"
-    viewData.post = await blog.getPostById(req.params.id);
   } catch (err) {
     viewData.message = "no results";
   }
@@ -298,46 +199,9 @@ app.get("/posts", ensureLogin, (req, res) => {
         }
       })
       .catch((err) => {
-        res.render("posts", { message: "no results" });
+        res.render("posts", { message: err });
       });
   }
-});
-
-app.get("/post/:id", ensureLogin, (req, res) => {
-  blog
-    .getPostById(req.params.id)
-    .then((data) => {
-      res.json(data);
-    })
-    .catch((err) => {
-      res.json({ message: err });
-    });
-});
-
-app.get("/categories", ensureLogin, (req, res) => {
-  blog
-    .getCategories()
-    .then((data) => {
-      if (data.length > 0) {
-        res.render("categories", { categories: data });
-      } else {
-        res.render("categories", { message: "no results" });
-      }
-    })
-    .catch((err) => {
-      res.render("categories", { message: "no results" });
-    });
-});
-
-app.get("/posts/add", ensureLogin, (req, res) => {
-  blog
-    .getCategories()
-    .then((data) => {
-      res.render("addPost", { layout: "main.hbs", categories: data });
-    })
-    .catch((err) => {
-      res.render("addPost", { categories: [] });
-    });
 });
 
 app.post(
@@ -376,6 +240,91 @@ app.post(
   }
 );
 
+app.get("/posts/add", ensureLogin, (req, res) => {
+  blog
+    .getCategories()
+    .then((data) => {
+      res.render("addPost", { categories: data });
+    })
+    .catch((err) => {
+      res.render("addPost", { categories: [] });
+    });
+});
+
+app.get("/post/:id", ensureLogin, (req, res) => {
+  blog
+    .getPostById(req.params.id)
+    .then((data) => {
+      res.json(data);
+    })
+    .catch((err) => {
+      res.json({ message: err });
+    });
+});
+
+app.get("/blog/:id", ensureLogin, async (req, res) => {
+  // Declare an object to store properties for the view
+  let viewData = {};
+
+  try {
+    // declare empty array to hold "post" objects
+    let posts = [];
+
+    // if there's a "category" query, filter the returned posts by category
+    if (req.query.category) {
+      // Obtain the published "posts" by category
+      posts = await blog.getPublishedPostsByCategory(req.query.category);
+      console.log(posts);
+    } else {
+      // Obtain the published "posts"
+      posts = await blog.getPublishedPosts();
+    }
+
+    // sort the published posts by postDate
+    posts.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+
+    // store the "posts" and "post" data in the viewData object (to be passed to the view)
+    viewData.posts = posts;
+  } catch (err) {
+    viewData.message = "no results";
+  }
+
+  try {
+    // Obtain the post by "id"
+    viewData.post = await blog.getPostById(req.params.id);
+  } catch (err) {
+    viewData.message = "no results";
+  }
+
+  try {
+    // Obtain the full list of "categories"
+    let categories = await blog.getCategories();
+
+    // store the "categories" data in the viewData object (to be passed to the view)
+    viewData.categories = categories;
+  } catch (err) {
+    viewData.categoriesMessage = "no results";
+  }
+
+  // render the "blog" view with all of the data (viewData)
+  res.render("blog", { data: viewData });
+});
+
+app.get("/categories", ensureLogin, (req, res) => {
+  blog
+    .getCategories()
+    .then((data) => {
+      if (data.length > 0) {
+        res.render("categories", { categories: data });
+      } else {
+        res.render("categories", { message: "no results" });
+      }
+    })
+    .catch((err) => {
+      res.render("categories", { message: err });
+    });
+});
+
 app.get("/categories/add", ensureLogin, (req, res) => {
   res.render("addCategory");
 });
@@ -413,8 +362,58 @@ app.get("/posts/delete/:id", ensureLogin, (req, res) => {
     });
 });
 
+app.get("/login", (req, res) => {
+  res.render("login");
+});
+
+app.get("/register", (req, res) => {
+  res.render("register");
+});
+
+app.post("/register", (req, res) => {
+  authData
+    .registerUser(req.body)
+    .then(() => {
+      res.render("register", { successMessage: "User created" }); //check this
+    })
+    .catch((err) => {
+      res.render("register", {
+        errorMessage: err,
+        userName: req.body.userName,
+      });
+    });
+});
+
+// call this function after the http server starts listening for requests
+
+app.post("/login", (req, res) => {
+  req.body.userAgent = req.get("User-Agent");
+  authData
+    .checkUser(req.body)
+    .then((user) => {
+      req.session.user = {
+        userName: user.userName,
+        email: user.email,
+        loginHistory: user.loginHistory,
+      };
+      res.redirect("/posts");
+    })
+    .catch((err) => {
+      res.render("login", { errorMessage: err, userName: req.body.userName });
+    });
+});
+
+app.get("/logout", (req, res) => {
+  req.session.reset();
+  res.redirect("/");
+});
+
+app.get("/userHistory", ensureLogin, (req, res) => {
+  res.render("userHistory");
+});
+
 app.use((req, res) => {
-  res.status(404).send("Error 404 not found");
+  res.status(404).send("404");
 });
 
 blog

@@ -1,5 +1,4 @@
 const Sequelize = require("sequelize");
-const fs = require("fs");
 let sequelize = new Sequelize(
   "scqjkifj",
   "scqjkifj",
@@ -50,61 +49,6 @@ module.exports.getAllPosts = function () {
       })
       .catch((err) => {
         reject("no results returned");
-      });
-  });
-};
-
-module.exports.getPublishedPosts = function () {
-  return new Promise((resolve, reject) => {
-    Post.findAll({
-      where: {
-        published: true,
-      },
-    })
-      .then((data) => {
-        resolve(data);
-      })
-      .catch((err) => {
-        reject("no results returned");
-      });
-  });
-};
-
-module.exports.getCategories = function () {
-  return new Promise((resolve, reject) => {
-    Category.findAll()
-      .then((data) => {
-        resolve(data);
-      })
-      .catch((err) => {
-        reject("no results returned");
-      });
-  });
-};
-
-module.exports.addPost = function (postData) {
-  return new Promise((resolve, reject) => {
-    postData.published = postData.published ? true : false;
-    for (let prop in postData) {
-      if (postData[prop] === "") {
-        postData[prop] = null;
-      }
-    }
-    postData.postDate = new Date();
-
-    Post.create({
-      body: postData.body,
-      title: postData.title,
-      postDate: postData.postDate,
-      featureImage: postData.featureImage,
-      published: postData.published,
-      category: postData.category,
-    })
-      .then((data) => {
-        resolve(data);
-      })
-      .catch((err) => {
-        reject("unable to create post");
       });
   });
 };
@@ -161,6 +105,49 @@ module.exports.getPostById = function (id) {
   });
 };
 
+module.exports.addPost = function (postData) {
+  return new Promise((resolve, reject) => {
+    postData.published = postData.published ? true : false;
+    for (let prop in postData) {
+      if (postData[prop] === "") {
+        postData[prop] = null;
+      }
+    }
+    postData.postDate = new Date();
+
+    Post.create({
+      body: postData.body,
+      title: postData.title,
+      postDate: postData.postDate,
+      featureImage: postData.featureImage,
+      published: postData.published,
+      category: postData.category,
+    })
+      .then((data) => {
+        resolve(data);
+      })
+      .catch((err) => {
+        reject("unable to create post");
+      });
+  });
+};
+
+module.exports.getPublishedPosts = function () {
+  return new Promise((resolve, reject) => {
+    Post.findAll({
+      where: {
+        published: true,
+      },
+    })
+      .then((data) => {
+        resolve(data);
+      })
+      .catch((err) => {
+        reject("no results returned");
+      });
+  });
+};
+
 module.exports.getPublishedPostsByCategory = function (category) {
   return new Promise((resolve, reject) => {
     Post.findAll({
@@ -169,6 +156,18 @@ module.exports.getPublishedPostsByCategory = function (category) {
         category: category,
       },
     })
+      .then((data) => {
+        resolve(data);
+      })
+      .catch((err) => {
+        reject("no results returned");
+      });
+  });
+};
+
+module.exports.getCategories = function () {
+  return new Promise((resolve, reject) => {
+    Category.findAll()
       .then((data) => {
         resolve(data);
       })
